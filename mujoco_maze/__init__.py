@@ -6,7 +6,7 @@ A maze environment using mujoco that supports custom tasks and robots.
 """
 
 
-import gym
+import gymnasium as gym
 
 from mujoco_maze.ant import AntEnv
 from mujoco_maze.maze_task import TaskRegistry

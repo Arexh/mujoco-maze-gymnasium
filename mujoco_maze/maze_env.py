@@ -12,13 +12,11 @@ import tempfile
 import xml.etree.ElementTree as ET
 from typing import Any, List, Optional, Tuple, Type
 
-import gym
+import gymnasium as gym
 import numpy as np
 
 from mujoco_maze import maze_env_utils, maze_task
 from mujoco_maze.agent_model import AgentModel
-
-from gym.core import ObsType
 
 # Directory that contains mujoco xml files.
 MODEL_DIR = os.path.dirname(os.path.abspath(__file__)) + "/assets"
@@ -366,9 +364,9 @@ class MazeEnv(gym.Env):
                 additional_obs.append(self.wrapped_env.get_body_com(name))
 
         obs = np.concatenate([wrapped_obs[:3]] + additional_obs + [wrapped_obs[3:]])
-        return np.concatenate([obs, *view, np.array([self.t * 0.001])])
+        return np.concatenate([obs, *view, np.array([self.t * 0.001])]).astype(np.float32)
 
-    def reset(self, **kwargs) -> Tuple[ObsType, dict]:
+    def reset(self, seed=None, options=None) -> np.ndarray:
         self.t = 0
         self.wrapped_env.reset()
         # Samples a new goal
@@ -378,8 +376,7 @@ class MazeEnv(gym.Env):
         if len(self._init_positions) > 1:
             xy = np.random.choice(self._init_positions)
             self.wrapped_env.set_xy(xy)
-        info = {}
-        return self._get_obs(), info
+        return self._get_obs(), {}
 
     def set_marker(self) -> None:
         for i, goal in enumerate(self._task.goals):
@@ -413,7 +410,6 @@ class MazeEnv(gym.Env):
                 self._websock_server_pipe = start_server(self._websock_port)
             return self._websock_server_pipe.send(self._render_image())
         else:
-            self.wrapped_env.render_mode = mode
             if self.wrapped_env.viewer is None:
                 self.wrapped_env.render()
                 self._maybe_move_camera(self.wrapped_env.viewer)
@@ -450,7 +446,7 @@ class MazeEnv(gym.Env):
         if self.wrapped_env.MANUAL_COLLISION:
             old_pos = self.wrapped_env.get_xy()
             old_objballs = self._objball_positions()
-            inner_next_obs, inner_reward, _, info = self.wrapped_env.step(action)
+            inner_next_obs, inner_reward, _, _, info = self.wrapped_env.step(action)
             new_pos = self.wrapped_env.get_xy()
             new_objballs = self._objball_positions()
             # Checks that the new_position is in the wall
@@ -478,7 +474,7 @@ class MazeEnv(gym.Env):
         outer_reward = self._task.reward(next_obs)
         done = self._task.termination(next_obs)
         info["position"] = self.wrapped_env.get_xy()
-        return next_obs, inner_reward + outer_reward, done, info
+        return next_obs, inner_reward + outer_reward, done, False, info
 
     def close(self) -> None:
         self.wrapped_env.close()

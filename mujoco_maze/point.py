@@ -8,23 +8,13 @@ Based on `models`_ and `rllab`_.
 
 from typing import Optional, Tuple
 
-import gym
-import mujoco
+import gymnasium as gym
 import numpy as np
 
 from mujoco_maze.agent_model import AgentModel
 
 
 class PointEnv(AgentModel):
-    metadata = {
-        "render_modes": [
-            "human",
-            "rgb_array",
-            "depth_array",
-        ],
-        "render_fps": 50,
-    }
-
     FILE: str = "point.xml"
     ORI_IND: int = 2
     MANUAL_COLLISION: bool = True
@@ -42,7 +32,7 @@ class PointEnv(AgentModel):
         super().__init__(file_path, 1, observation_space)
 
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, dict]:
-        qpos = self.data.qpos.copy()
+        qpos = self.sim.data.qpos.copy()
         qpos[2] += action[1]
         # Clip orientation
         if qpos[2] < -np.pi:
@@ -53,26 +43,26 @@ class PointEnv(AgentModel):
         # Compute increment in each direction
         qpos[0] += np.cos(ori) * action[0]
         qpos[1] += np.sin(ori) * action[0]
-        qvel = np.clip(self.data.qvel, -self.VELOCITY_LIMITS, self.VELOCITY_LIMITS)
+        qvel = np.clip(self.sim.data.qvel, -self.VELOCITY_LIMITS, self.VELOCITY_LIMITS)
         self.set_state(qpos, qvel)
         for _ in range(0, self.frame_skip):
-            mujoco.mj_step(self.model, self.data)
+            self.sim.step()
         next_obs = self._get_obs()
-        return next_obs, 0.0, False, {}
+        return next_obs, 0.0, False, False, {}
 
     def _get_obs(self):
         return np.concatenate(
             [
-                self.data.qpos.flat[:3],  # Only point-relevant coords.
-                self.data.qvel.flat[:3],
+                self.sim.data.qpos.flat[:3],  # Only point-relevant coords.
+                self.sim.data.qvel.flat[:3],
             ]
         )
 
     def reset_model(self):
         qpos = self.init_qpos + self.np_random.uniform(
-            size=self.model.nq, low=-0.1, high=0.1
+            size=self.sim.model.nq, low=-0.1, high=0.1
         )
-        qvel = self.init_qvel + self.np_random.random(self.model.nv) * 0.1
+        qvel = self.init_qvel + self.np_random.normal(self.sim.model.nv) * 0.1
 
         # Set everything other than point to original position and 0 velocity.
         qpos[3:] = self.init_qpos[3:]
@@ -81,12 +71,12 @@ class PointEnv(AgentModel):
         return self._get_obs()
 
     def get_xy(self):
-        return self.data.qpos[:2].copy()
+        return self.sim.data.qpos[:2].copy()
 
     def set_xy(self, xy: np.ndarray) -> None:
-        qpos = self.data.qpos.copy()
+        qpos = self.sim.data.qpos.copy()
         qpos[:2] = xy
-        self.set_state(qpos, self.data.qvel)
+        self.set_state(qpos, self.sim.data.qvel)
 
     def get_ori(self):
-        return self.data.qpos[self.ORI_IND]
+        return self.sim.data.qpos[self.ORI_IND]
